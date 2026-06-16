@@ -1,53 +1,55 @@
-# Claude Builders Bounty 🤖
+# Claude Code Safety Hook — Block Destructive Commands
 
-> A community bounty board for Claude Code builders.
+Pre-tool-use hook that intercepts dangerous bash commands before execution.
 
-Building with Claude Code? Have tasks to delegate?
-Want to get paid for contributing to AI projects?
-You're in the right place.
+## Blocked Patterns
 
----
+| Pattern | Risk |
+|---------|------|
+| `rm -rf` / `rm -r /` | Irreversible file deletion |
+| `DROP TABLE` | Database table destruction |
+| `TRUNCATE TABLE` | All-row wipe without backup |
+| `DELETE FROM` (without WHERE) | Bulk row deletion |
+| `git push --force` / `-f` | Overwritten remote history |
 
-## How it works
+## Quick Install
 
-**To post a bounty**
-1. Open a GitHub issue with a clear description and acceptance criteria
-2. Comment `/opire create $XXX` in the issue to set the reward
-3. Share the link — contributors will find it
+```bash
+# 1. Download
+curl -sL https://raw.githubusercontent.com/cibaxhilajiao/claude-builders-bounty/hook/block-destructive-commands-3/block_destructive.py -o ~/.claude/hooks/pre-tool-use
 
-**To claim a bounty**
-1. Browse the open issues below
-2. Comment `/opire try` in the issue you want to work on
-3. Submit a PR — payment is automatic on merge ✅
+# 2. Make executable
+chmod +x ~/.claude/hooks/pre-tool-use
+```
 
----
+## How It Works
 
-## Active Bounties
+Claude Code calls this hook before every bash tool invocation. The hook:
 
-| # | Task | Amount | Status |
-|---|------|--------|--------|
-| [#1](../../issues/1) | SKILL: Generate a CHANGELOG from git history | $50 | 🟢 Open |
-| [#2](../../issues/2) | TEMPLATE: CLAUDE.md for a Next.js + SQLite project | $75 | 🟢 Open |
-| [#3](../../issues/3) | HOOK: Block destructive bash commands in Claude Code | $100 | 🟢 Open |
-| [#4](../../issues/4) | AGENT: PR reviewer with structured Markdown output | $150 | 🟢 Open |
-| [#5](../../issues/5) | WORKFLOW: n8n + Claude API — automated weekly dev summary | $200 | 🟢 Open |
+1. Reads JSON input from stdin (Claude Code hook protocol)
+2. Checks the command against blocklist patterns
+3. If blocked → logs to `~/.claude/hooks/blocked.log`, prints reason to stderr, exits with code 2
+4. If safe → exits 0 (Claude proceeds)
 
----
+## Log Format
 
-## Rules
+```
+[2026-06-16T02:17:04+00:00] BLOCKED | project=/home/user/project | pattern=\brm\s+-rf\b
+  command: rm -rf /important/dir
+```
 
-- Tasks must be related to Claude Code or AI tooling
-- Every issue must have clear acceptance criteria before a bounty is activated
-- Payment is handled by [Opire](https://opire.dev) (Stripe)
-- Quality over speed — a solid PR beats a fast one
+## Disable
 
----
+```bash
+rm ~/.claude/hooks/pre-tool-use
+```
 
-## Community
+## Testing
 
-- 🐦 X: [@ClaudeBounty](https://x.com/ClaudeBounty)
-- 📧 Contact: claudebounty@gmail.com
+```bash
+# Should block (exit 2)
+echo '{"tool_name":"bash","tool_input":{"command":"rm -rf /tmp"}}' | python3 ~/.claude/hooks/pre-tool-use
 
----
-
-*Started by the Claude builder community · March 2026 · MIT License*
+# Should pass (exit 0)
+echo '{"tool_name":"bash","tool_input":{"command":"ls -la"}}' | python3 ~/.claude/hooks/pre-tool-use
+```
